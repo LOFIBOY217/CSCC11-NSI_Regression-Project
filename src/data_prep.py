@@ -18,11 +18,36 @@ def prepare_monthly_dataset(csv_path):
     # ---- aggregate + compute NSI ----
     monthly = build_feature_matrix.aggregate_monthly_scores(df)
     monthly = build_feature_matrix.compute_nsi(monthly)
+
     monthly = build_feature_matrix.encode_basic_features(monthly)
-    monthly = build_feature_matrix.add_nsi_lag(monthly)
-    monthly = build_feature_matrix.add_nsi_rolling_avg(monthly)
+
+    monthly = build_feature_matrix.add_prev_month_nsi(monthly)
+    monthly = build_feature_matrix.add_nsi_3m_avg(monthly)
 
     # ---- drop unusable first-rows ----
+    monthly = monthly.dropna(subset=['Prev_Month_NSI', 'NSI_3M_Avg']).copy()
+
+    return monthly
+
+
+def prepare_monthly_dataset_onehot(csv_path):
+    """
+    Variant of the monthly dataset builder that keeps the neighbourhood name so
+    we can apply one-hot encoding downstream.
+    """
+    df = pd.read_csv(csv_path)
+
+    df = pp.fill_occ_fields_from_date(df)
+    df = build_feature_matrix.add_severity_weights(df)
+
+    monthly = build_feature_matrix.aggregate_monthly_scores(df)
+    monthly = build_feature_matrix.compute_nsi(monthly)
+
+    monthly = build_feature_matrix.encode_report_month_numeric(monthly)
+
+    monthly = build_feature_matrix.add_prev_month_nsi(monthly)
+    monthly = build_feature_matrix.add_nsi_3m_avg(monthly)
+
     monthly = monthly.dropna(subset=['Prev_Month_NSI', 'NSI_3M_Avg']).copy()
 
     return monthly

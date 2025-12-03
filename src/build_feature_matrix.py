@@ -1,4 +1,5 @@
 from sklearn.preprocessing import LabelEncoder
+import pandas as pd
 
 # ------------------------
 # Severity score mapping for different crime categories
@@ -64,7 +65,7 @@ def compute_nsi(df):
     return df
 
 
-def add_nsi_lag(df):
+def add_prev_month_nsi(df):
     """
     Add previous month's NSI as a predictive feature.
     """
@@ -72,27 +73,21 @@ def add_nsi_lag(df):
     df['Prev_Month_NSI'] = df.groupby('NEIGHBOURHOOD_158')['NSI'].shift(1)
     return df
 
-def add_nsi_rolling_avg(df, window=3):
+
+def add_nsi_3m_avg(df):
     """
-    Add rolling mean NSI of previous N months for each neighbourhood.
-    Creates NSI_3M_Avg column.
+    Add 3-month rolling average NSI (excluding current month).
     """
     df = df.sort_values(['NEIGHBOURHOOD_158', 'REPORT_YEAR', 'REPORT_MONTH'])
-
     df['NSI_3M_Avg'] = (
         df.groupby('NEIGHBOURHOOD_158')['NSI']
-          .transform(lambda s: s.shift(1).rolling(window).mean())
+          .transform(lambda s: s.shift(1).rolling(3).mean())
     )
-
     return df
 
 def encode_basic_features(df):
     """
     Encode categorical fields into numeric form for ML models.
-
-    Operations:
-        * NEIGHBOURHOOD_158 → Label encoded integers
-        * REPORT_MONTH → converted from month name to 1-12
     """
     le = LabelEncoder()
 
@@ -101,5 +96,69 @@ def encode_basic_features(df):
 
     # Convert month string → numeric month
     df['REPORT_MONTH'] = df['REPORT_MONTH'].map(month_map).astype(int)
+
+    return df
+
+
+def encode_report_month_numeric(df, column='REPORT_MONTH'):
+    """
+    Convert month string → numeric month without touching NEIGHBOURHOOD_158.
+    Used by pipelines that need to keep the categorical neighbourhood label.
+    """
+    df = df.copy()
+    df[column] = df[column].map(month_map).astype(int)
+    return df
+
+
+def build_neighbourhood_one_hot_features(
+    df,
+    numeric_feature_cols,
+    neighbourhood_col='NEIGHBOURHOOD_158',
+    prefix='NEIGHBOURHOOD'
+):
+    """
+    Append a one-hot encoding of the neighbourhood column and return the expanded
+    dataframe along with the full feature column list.
+    """
+    df = df.copy()
+    one_hot = pd.get_dummies(df[neighbourhood_col], prefix=prefix)
+    df = df.drop(columns=[neighbourhood_col])
+    df = pd.concat([df, one_hot], axis=1)
+    feature_cols = numeric_feature_cols + one_hot.columns.tolist()
+    return df, feature_cols
+
+
+def add_prev_crime_count(df):
+    """
+    Add previous month's crime count as a predictive feature.
+    """
+    df = df.sort_values(['NEIGHBOURHOOD_158', 'REPORT_YEAR', 'REPORT_MONTH'])
+    df['Prev_Crime_Count'] = df.groupby('NEIGHBOURHOOD_158')['Crime_Count'].shift(1)
+    return df
+
+def add_crime_6m_avg(df, window=6):
+    """
+    Add rolling average crime count of previous N months for each neighbourhood.
+    Creates Prev_6M_Crime_Avg column.
+    """
+    df = df.sort_values(['NEIGHBOURHOOD_158', 'REPORT_YEAR', 'REPORT_MONTH'])
+
+    df['Prev_6M_Crime_Avg'] = (
+        df.groupby('NEIGHBOURHOOD_158')['Crime_Count']
+          .transform(lambda s: s.shift(1).rolling(window).mean())
+    )
+
+    return df
+
+def add_prev_year_nsi(df):
+    """
+    Add previous year's NSI for the same month as a predictive feature.
+    """
+    df = df.sort_values(['NEIGHBOURHOOD_158', 'REPORT_YEAR', 'REPORT_MONTH'])
+
+    df['Prev_Year_NSI'] = (
+        df.groupby(['NEIGHBOURHOOD_158', 'REPORT_MONTH'])['NSI']
+          .shift(1)  # previous year's NSI for the same neighbourhood & month
+    )
 
     return df

@@ -60,7 +60,6 @@ def train_poly_model(df, feature_cols, target_col, scale=True, degree=2, interac
     y_pred = predict(poly, model, X_test)
 
     metrics = evaluate_model(y_test, y_pred)
-
     return model, poly, y_test, y_pred, metrics
 
 
@@ -77,67 +76,107 @@ def visualize_poly_results(y_test, y_pred, n_samples=200):
 ############################################
 # Hyperparameter Grid Search
 ############################################
-
-def explore_poly_params(df, feature_cols, target_col, degrees, interaction_flags, scale=True):
+def poly_hparam_search(df, feature_cols, target_col, degrees=range(1, 6), scale=True):
     """
-    Grid search over:
-        degree × interaction_only
+    Search polynomial configurations over:
+        degree ∈ [1..7], interaction_only ∈ {False, True}
 
     Returns:
-        list of dict metrics for each combination.
+        results: list of dict
+        best_config: dict
     """
-
-    results = []
-
     df = df.dropna(subset=['Prev_Month_NSI']).copy()
     X_train, X_test, y_train, y_test, scaler = split_data(df, feature_cols, target_col, scale)
 
-    for degree, inter in itertools.product(degrees, interaction_flags):
+    results = []
+
+    for degree, inter in itertools.product(degrees, [False, True]):
         poly = PolynomialFeatures(
             degree=degree,
             include_bias=False,
             interaction_only=inter
         )
-
-        X_poly_train = poly.fit_transform(X_train)
-        X_poly_test  = poly.transform(X_test)
+        X_tr = poly.fit_transform(X_train)
+        X_te = poly.transform(X_test)
 
         model = LinearRegression()
-        model.fit(X_poly_train, y_train)
-        y_pred = model.predict(X_poly_test)
+        model.fit(X_tr, y_train)
+        y_pred = model.predict(X_te)
+
         metrics = evaluate_model(y_test, y_pred)
 
         results.append({
             "degree": degree,
-            "interaction_only": inter,
-            "R2":  metrics["R2"],
-            "RMSE": metrics["RMSE"],
-            "MAE": metrics["MAE"]
+            "interaction": inter,
+            "R2": metrics["R2"],
+            "RMSE": metrics["RMSE"]
         })
 
-    return results
+    # Best = maximize R2 and minimize RMSE
+    best = max(results, key=lambda r: (r["R2"], -r["RMSE"]))
+    return results, best
 
 
-def plot_poly_grid(results, metric="R2"):
-    """
-    Visualize hyperparameter search matrix for given metric.
-    metric ∈ {'R2','RMSE','MAE'}
-    """
+############################################
+# RMSE Plot (Fixed Version)
+############################################
+def plot_poly_rmse_lines(results):
+    """Plot RMSE vs degree for both interaction settings."""
 
-    degs = sorted(set(r["degree"] for r in results))
-    inters = [False, True]
+    # separate two result groups correctly
+    no_inter = sorted([r for r in results if not r["interaction"]], key=lambda r: r["degree"])
+    inter    = sorted([r for r in results if r["interaction"]], key=lambda r: r["degree"])
 
-    matrix = [[
-        next(r[metric] for r in results if r["degree"] == d and r["interaction_only"] == i)
-        for i in inters
-    ] for d in degs]
+    degrees = [r["degree"] for r in no_inter]
+    rmse_no_inter = [r["RMSE"] for r in no_inter]
+    rmse_inter    = [r["RMSE"] for r in inter]
 
-    plt.figure(figsize=(8, len(degs) * 0.6 + 3))
-    plt.imshow(matrix, cmap="viridis", aspect="auto")
-    plt.colorbar(label=metric)
+    # Plot 1: No interaction
+    plt.figure(figsize=(8, 4))
+    plt.plot(degrees, rmse_no_inter, marker='o', linewidth=2)
+    plt.title("Polynomial Regression RMSE vs Degree (interaction=False)")
+    plt.xlabel("Polynomial Degree")
+    plt.ylabel("RMSE")
+    plt.grid(True)
+    plt.show()
 
-    plt.xticks([0, 1], ["interaction=False", "interaction=True"])
-    plt.yticks(range(len(degs)), [f"degree={d}" for d in degs])
+    # Plot 2: Interaction
+    plt.figure(figsize=(8, 4))
+    plt.plot(degrees, rmse_inter, marker='o', linewidth=2, color='darkred')
+    plt.title("Polynomial Regression RMSE vs Degree (interaction=True)")
+    plt.xlabel("Polynomial Degree")
+    plt.ylabel("RMSE")
+    plt.grid(True)
+    plt.show()
 
-    plt.title(f"Polynomial Regression Grid Search ({metric})")
+
+############################################
+# R² Plot (Fixed Version)
+############################################
+def plot_poly_r2_lines(results):
+    """Plot R² vs degree for both interaction settings."""
+
+    no_inter = sorted([r for r in results if not r["interaction"]], key=lambda r: r["degree"])
+    inter    = sorted([r for r in results if r["interaction"]], key=lambda r: r["degree"])
+
+    degrees = [r["degree"] for r in no_inter]
+    r2_no_inter = [r["R2"] for r in no_inter]
+    r2_inter    = [r["R2"] for r in inter]
+
+    # Plot 1: No interaction
+    plt.figure(figsize=(8, 4))
+    plt.plot(degrees, r2_no_inter, marker='o', linewidth=2)
+    plt.title("Polynomial Regression R² vs Degree (interaction=False)")
+    plt.xlabel("Polynomial Degree")
+    plt.ylabel("R² Score")
+    plt.grid(True)
+    plt.show()
+
+    # Plot 2: Interaction
+    plt.figure(figsize=(8, 4))
+    plt.plot(degrees, r2_inter, marker='o', linewidth=2, color='darkred')
+    plt.title("Polynomial Regression R² vs Degree (interaction=True)")
+    plt.xlabel("Polynomial Degree")
+    plt.ylabel("R² Score")
+    plt.grid(True)
     plt.show()

@@ -10,32 +10,35 @@ from src.models.utils import (
 )
 
 
-##############################
-# KNN core model functions
-##############################
+############################################
+# KNN Model Core
+############################################
 
-def build_model(n_neighbors=5, weights='distance'):
-    """Initialize a KNN regressor."""
+def build_model(n_neighbors=5, weights='distance', metric='euclidean'):
+    """Initialize a KNN regressor with selected hyperparameters."""
     return KNeighborsRegressor(
         n_neighbors=n_neighbors,
-        weights=weights
+        weights=weights,
+        metric=metric
     )
 
 
 def train_model(model, X_train, y_train):
-    """Fit model."""
+    """Fit KNN model."""
     model.fit(X_train, y_train)
     return model
 
 
 def predict(model, X_test):
-    """Predict NSI."""
+    """Predict NSI values."""
     return model.predict(X_test)
 
 
-def train_knn_model(df, feature_cols, target_col, scale=True, n_neighbors=5):
+def train_knn_model(df, feature_cols, target_col,
+                    scale=True, n_neighbors=5,
+                    weights='distance', metric='euclidean'):
     """
-    Full single-run KNN pipeline:
+    Full KNN pipeline:
     split → build → train → predict → evaluate
     """
     df = df.dropna(subset=['Prev_Month_NSI']).copy()
@@ -44,7 +47,7 @@ def train_knn_model(df, feature_cols, target_col, scale=True, n_neighbors=5):
         df, feature_cols, target_col, scale
     )
 
-    model = build_model(n_neighbors=n_neighbors)
+    model = build_model(n_neighbors, weights, metric)
     model = train_model(model, X_train, y_train)
     y_pred = predict(model, X_test)
     metrics = evaluate_model(y_test, y_pred)
@@ -52,54 +55,78 @@ def train_knn_model(df, feature_cols, target_col, scale=True, n_neighbors=5):
     return model, y_test, y_pred, metrics
 
 
-##############################
-# K exploration functions
-##############################
+############################################
+# Hyperparameter Exploration
+############################################
 
-def explore_k_values(df, feature_cols, target_col, k_values, scale=True):
+def knn_hparam_search(df, feature_cols, target_col,
+                      k_values, weight_options, metric_options,
+                      scale=True):
     """
-    Iterate multiple K values and record performance metrics.
+    Grid-search over:
+      • k ∈ k_values
+      • weights ∈ {'uniform', 'distance'}
+      • metric ∈ {'euclidean', 'manhattan'}
+
+    Returns:
+        results: list of dict
+        best:    selected config by highest R2 & lowest RMSE
     """
+
+    df = df.dropna(subset=['Prev_Month_NSI']).copy()
+    X_train, X_test, y_train, y_test, scaler = split_data(df, feature_cols, target_col, scale)
+
     results = []
 
     for k in k_values:
-        _, y_test, y_pred, metrics = train_knn_model(
-            df,
-            feature_cols,
-            target_col,
-            scale=scale,
-            n_neighbors=k
-        )
-        results.append({
-            "k": k,
-            "R2": metrics["R2"],
-            "MAE": metrics["MAE"],
-            "RMSE": metrics["RMSE"]
-        })
+        for w in weight_options:
+            for m in metric_options:
 
-    return results
+                model = build_model(k, w, m)
+                model.fit(X_train, y_train)
+                y_pred = model.predict(X_test)
+                metrics = evaluate_model(y_test, y_pred)
+
+                results.append({
+                    "k": k,
+                    "weights": w,
+                    "metric": m,
+                    "R2": metrics["R2"],
+                    "RMSE": metrics["RMSE"],
+                    "MAE": metrics["MAE"]
+                })
+
+    # Best = highest R2 and lowest RMSE
+    best = max(results, key=lambda r: (r["R2"], -r["RMSE"]))
+    return results, best
 
 
-def plot_k_performance(results, metric="R2"):
+############################################
+# Visualization Utilities
+############################################
+
+def plot_knn_metric_vs_k(results, metric="R2"):
     """
-    Plot performance metrics vs K.
-    metric ∈ {"R2", "MAE", "RMSE"}
+    Plot performance metric vs k for each weighting scheme.
+    metric ∈ {"R2", "RMSE", "MAE"}
     """
-    ks = [res["k"] for res in results]
-    vals = [res[metric] for res in results]
+    ks = sorted(set(r["k"] for r in results))
+    for w in set(r["weights"] for r in results):
 
-    plt.figure(figsize=(10, 5))
-    plt.plot(ks, vals, marker='o')
-    plt.title(f"KNN Performance vs K ({metric})")
-    plt.xlabel("K (Number of Neighbors)")
+        vals = [
+            next(r[metric] for r in results if r["k"] == k and r["weights"] == w)
+            for k in ks
+        ]
+
+        plt.plot(ks, vals, marker='o', label=f"weights={w}")
+
+    plt.title(f"KNN {metric} vs K")
+    plt.xlabel("k (number of neighbors)")
     plt.ylabel(metric)
     plt.grid(True)
+    plt.legend()
     plt.show()
 
-
-##############################
-# Combined visualization
-##############################
 
 def visualize_knn_results(y_test, y_pred, n_samples=200):
     """Plot predictions + residuals."""

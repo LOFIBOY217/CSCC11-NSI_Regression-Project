@@ -23,68 +23,18 @@ This repo contains a light-weight pipeline for building a **Neighborhood Safety 
     └── models/
 ```
 
-## Getting started
-
-1. **Create an environment**
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate
-   pip install --upgrade pip
-   pip install pandas numpy scikit-learn torch matplotlib
-   ```
-2. **(Optional) Update the raw data** – drop a fresh CSV from the open portal into `data/` and adjust the path you pass to `prepare_monthly_dataset`.
-
 ## Usage
 
-- **环境准备**：在仓库根目录创建虚拟环境并安装依赖
+- **Environment setup**: create a virtual environment in the repo root and install dependencies
   ```
   python -m venv .venv
   source .venv/bin/activate
   pip install --upgrade pip
   pip install pandas numpy scikit-learn torch matplotlib jupyter
   ```
-- **数据就绪**：`data/Major_Crime_Indicators_Open_Data.csv` 已提供；若需要最新数据，可从开放门户下载后覆盖或修改路径。
-- **运行核心 Notebook**：打开 `notebooks/linear_regression_pipeline.ipynb`（以及目录下其他 Notebook），在 Jupyter / JupyterLab 中直接 **Run All**。Notebook 会按顺序完成：
-  - 调用 `src/preprocess.py`, `src/build_feature_matrix.py`, `src/data_prep.py` 进行清洗、月度聚合、NSI 计算、特征工程
-  - 基于 `src/config/feature_def.py` 的 FEATURE_* 组合构建特征矩阵
-  - 训练、评估模型（线性回归、LSTM 等）并输出指标/可视化
-- **命令行脚本（可选）**：若希望在 Python 脚本中复现 LSTM 流程，可参考：
-  ```python
-  from src.data_prep import prepare_monthly_dataset
-  from src.config.feature_def import FEATURE_BASE, TARGET_COL
-  from src.models.LSTM_model import train_lstm_pipeline, create_sequences_per_neighborhood
-
-  monthly_df = prepare_monthly_dataset("data/Major_Crime_Indicators_Open_Data.csv")
-  model, y_true, y_pred, metrics, _ = train_lstm_pipeline(
-      df=monthly_df,
-      feature_cols=FEATURE_BASE,
-      target_col=TARGET_COL,
-      seq_length=12,
-      create_sequences_fn=create_sequences_per_neighborhood,
-  )
-  print(metrics)
-  ```
-- **探索与迭代**：在 Notebook 中做 ad-hoc EDA、调参或模型比较，效果确定后可把逻辑抽到 `src/` 模块里以便脚本化复现。
-
-## Feature sets
-
-`src/config/feature_def.py` defines curated bundles that you can swap into the pipeline:
-
-| Config | Description |
-| --- | --- |
-| `FEATURE_BASE` | Minimal inputs: neighbourhood id, report year/month, previous NSI, and centroid coordinates. |
-| `FEATURE_NSI_3M` | Adds a 3-month rolling NSI average for short-term trend awareness. |
-| `FEATURE_NSI_YEAR` | Adds previous-year NSI for the same month to capture seasonality. |
-| `FEATURE_CRIME_6M` | Adds crime counts and 6-month rolling averages for richer temporal dynamics. |
-
-Choose the list that matches the modeling question; all include `TARGET_COL = "NSI"`.
-
-## Notebooks & experiments
-
-The `notebooks/` directory holds the end-to-end pipelines used in the course project (for example, `linear_regression_pipeline.ipynb`). After installing dependencies, open each notebook and simply **Run All** to reproduce the entire workflow—from data prep through model training/evaluation—without touching the CLI scripts. Use notebooks for exploratory data analysis, quick hypothesis testing, or plotting alternative models; when something becomes production-ready, migrate the logic into `src/` for reusability.
-
-## Next steps
-
-- Tune hyperparameters (layers, hidden size, learning rate) or swap in other architectures (Temporal CNN, Transformers).
-- Integrate cross-validation and backtesting utilities under `src/models`.
-- Expose an inference script or simple API/UI that consumes the trained LSTM checkpoint for real-time NSI projections.
+- **Data**: the raw CSV `data/Major_Crime_Indicators_Open_Data.csv` is already included; download a fresh copy from the open data portal if you want the latest snapshot.
+- **Run the core notebook**: open `notebooks/linear_regression_pipeline.ipynb` (and any other notebook in the folder) and simply **Run All** inside Jupyter / JupyterLab. The notebook orchestrates:
+  - calling `src/preprocess.py`, `src/build_feature_matrix.py`, `src/data_prep.py` for cleaning, monthly aggregation, NSI computation, and feature engineering
+  - building the feature matrix with the FEATURE_* bundles defined in `src/config/feature_def.py`
+  - training/evaluating the models (linear regression, LSTM, etc.) and emitting metrics/plots
+- **Explore & iterate**: use the notebooks for ad-hoc EDA, hyper-parameter tuning, or model comparisons; once the workflow solidifies, port the logic into `src/` modules for repeatable runs.

@@ -3,9 +3,6 @@ import pandas as pd
 def fill_occ_fields_from_date(df, date_col="OCC_DATE"):
     """
     Fill or generate OCC_* fields based on OCC_DATE (EXCEPT OCC_HOUR).
-    Ensures consistent data types:
-        OCC_YEAR, OCC_DAY, OCC_DOY -> Int64
-        OCC_MONTH, OCC_DOW -> str
     """
     # Parse OCC_DATE into datetime format
     df[date_col] = pd.to_datetime(
